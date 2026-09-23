@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net9.0;netstandard2.1</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Evoq.Mcp.ToolSchema</RootNamespace>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>Evoq.Mcp.ToolSchema</PackageId>
+    <Authors>Luke Puplett</Authors>
+    <Description>Generates MCP (Model Context Protocol) tool definitions — name, description, and JSON Schema input schema — by reflecting over ASP.NET-style controller actions. Works from convention plus a small set of attributes (BotSurface, ToolName, ToolHints, ExcludeFromTools, ExactlyOneOf, AtLeastOneOf) with no dependency on ASP.NET Core itself.</Description>
+    <PackageTags>mcp;model-context-protocol;json-schema;reflection;aspnetcore;llm;tools</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/lukepuplett/evoq-mcp-toolschema</RepositoryUrl>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.1'">
+    <PackageReference Include="System.Text.Json" Version="9.0.0" />
+    <PackageReference Include="System.ComponentModel.Annotations" Version="5.0.0" />
+  </ItemGroup>
+
+</Project>
