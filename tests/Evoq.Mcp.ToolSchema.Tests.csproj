@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Evoq.Mcp.ToolSchema\Evoq.Mcp.ToolSchema.csproj" />
+    <ProjectReference Include="..\src\Evoq.Mcp.ToolSchema.csproj" />
   </ItemGroup>
 
 </Project>
