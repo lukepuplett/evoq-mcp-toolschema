@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFrameworks>net8.0;net9.0;netstandard2.1</TargetFrameworks>
     <Nullable>enable</Nullable>
-    <RootNamespace>Evoq.Mcp.ToolSchema</RootNamespace>
+    <RootNamespace>Evoq</RootNamespace>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
 

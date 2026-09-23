@@ -4,7 +4,7 @@
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
-    <RootNamespace>Evoq.Mcp.ToolSchema.Tests</RootNamespace>
+    <RootNamespace>Evoq</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
