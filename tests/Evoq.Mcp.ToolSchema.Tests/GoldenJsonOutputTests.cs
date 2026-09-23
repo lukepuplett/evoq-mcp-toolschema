@@ -1,6 +1,7 @@
 #nullable enable
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Evoq.Mcp.ToolSchema;
+using System;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
@@ -130,6 +131,43 @@ public class GoldenJsonOutputTests
             result);
     }
 
+    [TestMethod]
+    public void McpToolDefinitionBuilder__Build__when__get_with_unannotated_mixed_type_params__then__produces_known_json()
+    {
+        var method = typeof(GoldenApiController).GetMethod(nameof(GoldenApiController.FindWidgets))!;
+
+        var result = builder.Build(method);
+
+        // None of FindWidgets's parameters carry [FromRoute]/[FromQuery] — proves non-body
+        // primitives (including Guid, nullable DateTime, bool, and enum) become named schema
+        // properties by parameter name whether or not an explicit binding attribute is present.
+        AssertJsonEquals(
+            """
+            {
+              "name": "golden_find_widgets",
+              "description": "Finds widgets by owner, optional cutoff date, archive inclusion, and status",
+              "inputSchema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "ownerId": { "type": "string", "format": "uuid" },
+                  "since": { "type": "string", "format": "date-time" },
+                  "includeArchived": { "type": "boolean" },
+                  "status": { "type": "string", "enum": ["Draft", "Published", "Archived"] }
+                },
+                "additionalProperties": false
+              },
+              "annotations": {
+                "readOnlyHint": true,
+                "destructiveHint": false,
+                "openWorldHint": false,
+                "idempotentHint": false
+              }
+            }
+            """,
+            result);
+    }
+
     private static void AssertJsonEquals(string expectedJson, object actual)
     {
         var expectedNode = JsonNode.Parse(expectedJson);
@@ -170,7 +208,16 @@ public class GoldenJsonOutputTests
         {
             return Ok();
         }
+
+        [HttpGet("find")]
+        [System.ComponentModel.Description("Finds widgets by owner, optional cutoff date, archive inclusion, and status")]
+        public IActionResult FindWidgets(Guid ownerId, DateTime? since, bool includeArchived, WidgetStatus status)
+        {
+            return Ok();
+        }
     }
+
+    private enum WidgetStatus { Draft, Published, Archived }
 
     private class CreateWidgetRequest
     {

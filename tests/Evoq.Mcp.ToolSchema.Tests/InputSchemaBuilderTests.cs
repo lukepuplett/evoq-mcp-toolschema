@@ -52,6 +52,59 @@ public class InputSchemaBuilderTests
         Assert.IsTrue(properties?.ContainsKey("fileName"), "Route/query primitives are fine and become a named property");
     }
 
+    private enum WidgetStatus { Draft, Published, Archived }
+
+    [TestMethod]
+    public void InputSchemaBuilder__Build__when__non_body_param_is_bare_Guid__then__named_property_with_uuid_format()
+    {
+        var schema = builder.Build(new[] { Param(typeof(Guid), isBody: false, name: "widgetId") });
+
+        var properties = schema["properties"] as IDictionary<string, object?>;
+        var widgetId = properties?["widgetId"] as IDictionary<string, object?>;
+        Assert.IsNotNull(widgetId, "Guid route/query param should become a named property");
+        Assert.AreEqual("string", widgetId!["type"], "Guid should map to schema type string");
+        Assert.AreEqual("uuid", widgetId["format"], "Guid should carry format uuid");
+    }
+
+    [TestMethod]
+    public void InputSchemaBuilder__Build__when__non_body_param_is_nullable_DateTime__then__named_property_with_date_time_format()
+    {
+        var schema = builder.Build(new[] { Param(typeof(DateTime?), isBody: false, name: "since") });
+
+        var properties = schema["properties"] as IDictionary<string, object?>;
+        var since = properties?["since"] as IDictionary<string, object?>;
+        Assert.IsNotNull(since, "Nullable DateTime route/query param should become a named property");
+        Assert.AreEqual("string", since!["type"], "DateTime should map to schema type string");
+        Assert.AreEqual("date-time", since["format"], "DateTime should carry format date-time");
+    }
+
+    [TestMethod]
+    public void InputSchemaBuilder__Build__when__non_body_param_is_bare_bool__then__named_property_with_boolean_type()
+    {
+        var schema = builder.Build(new[] { Param(typeof(bool), isBody: false, name: "includeArchived") });
+
+        var properties = schema["properties"] as IDictionary<string, object?>;
+        var includeArchived = properties?["includeArchived"] as IDictionary<string, object?>;
+        Assert.IsNotNull(includeArchived, "bool route/query param should become a named property");
+        Assert.AreEqual("boolean", includeArchived!["type"], "bool should map to schema type boolean");
+    }
+
+    [TestMethod]
+    public void InputSchemaBuilder__Build__when__non_body_param_is_bare_enum__then__named_property_with_enum_values()
+    {
+        var schema = builder.Build(new[] { Param(typeof(WidgetStatus), isBody: false, name: "status") });
+
+        var properties = schema["properties"] as IDictionary<string, object?>;
+        var status = properties?["status"] as IDictionary<string, object?>;
+        Assert.IsNotNull(status, "Enum route/query param should become a named property");
+        Assert.AreEqual("string", status!["type"], "Enum should map to schema type string");
+        var enumValues = status["enum"] as IEnumerable<string>;
+        CollectionAssert.AreEqual(
+            new[] { "Draft", "Published", "Archived" },
+            enumValues?.ToList(),
+            "Enum property should list all member names");
+    }
+
     [TestMethod]
     public void InputSchemaBuilder__Build__when__single_record_type__then__returns_object_with_all_properties()
     {

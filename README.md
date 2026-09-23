@@ -8,14 +8,14 @@ No dependency on ASP.NET Core itself: HTTP method and model-binding attributes (
 
 ```csharp
 var generator = new McpToolDefinitionsBatchGenerator();
-var tools = generator.GenerateForSurface(typeof(JournalApiController), surfaceName: "journal");
+var tools = generator.GenerateForSurface(typeof(OrdersApiController), surfaceName: "orders");
 ```
 
-A qualifying action needs both an `[Http*]` attribute and a `[Description]` attribute. Attach `[BotSurface("journal")]` to a controller or action to scope it to a surface; `[ExcludeFromTools]` removes it from discovery entirely.
+A qualifying action needs both an `[Http*]` attribute and a `[Description]` attribute. Attach `[BotSurface("orders")]` to a controller or action to scope it to a surface; `[ExcludeFromTools]` removes it from discovery entirely.
 
 ## Surfaces: exposing different tool sets to different callers
 
-A "surface" is just a string name (`"journal"`, `"workflows"`, `"account"`, ...) you assign to
+A "surface" is just a string name (`"orders"`, `"widgets"`, `"admin"`, ...) you assign to
 actions with `[BotSurface("...")]`. It's the mechanism for exposing **different MCP tool sets to
 different callers** from the same set of controllers — one API, multiple tool lists depending on
 who's asking.
@@ -26,17 +26,17 @@ surface(s) to generate for — e.g. by role, subscription tier, or MCP client id
 
 ```csharp
 var surfacesForThisCaller = caller.IsAdmin
-    ? new[] { "journal", "workflows", "account" }
-    : new[] { "journal", "account" };
+    ? new[] { "orders", "widgets", "admin" }
+    : new[] { "orders", "widgets" };
 
 var tools = surfacesForThisCaller
     .SelectMany(surface => generator.GenerateForSurface(controllerTypes, surface))
     .ToList();
 ```
 
-An action can belong to more than one surface (`[BotSurface("journal", "timesheets")]` or repeated
-attributes), and a surface can optionally be restricted to one channel (`[BotSurface("journal",
-channel: "MCP")]`) if the same controller also serves a non-MCP integration (e.g. a WhatsApp bot)
+An action can belong to more than one surface (`[BotSurface("orders", "widgets")]` or repeated
+attributes), and a surface can optionally be restricted to one channel (`[BotSurface("orders",
+channel: "MCP")]`) if the same controller also serves a non-MCP integration (e.g. a chat bot)
 that should see a different tool subset.
 
 The library only filters by surface name — deciding *which* surfaces a given caller is entitled to
@@ -44,11 +44,107 @@ is your application's policy, not something this library opines on.
 
 ## Attributes
 
-- `BotSurfaceAttribute` — assigns a controller/action to one or more MCP surfaces, optionally restricted to a channel.
-- `ExcludeFromToolsAttribute` — hides a controller/action from MCP tool discovery.
-- `ToolHintsAttribute` — overrides the convention-derived `readOnly`/`destructive`/`openWorld`/`idempotent` annotation hints.
-- `ToolNameAttribute` — overrides the convention-derived snake_case tool name.
-- `ExactlyOneOfAttribute` / `AtLeastOneOfAttribute` — class-level constraints on a request DTO, emitted as JSON Schema `oneOf`/`anyOf`.
+Every action needs `[Http*]` + `[Description]` to qualify at all (that's the two-attribute floor —
+see Usage above). Everything below is optional, on top of that floor.
+
+### `[BotSurface]` — which tool set(s) an action belongs to
+
+Covered in full above — see [Surfaces](#surfaces-exposing-different-tool-sets-to-different-callers).
+Controller- or method-level, repeatable, optionally channel-scoped.
+
+### `[ExcludeFromTools]` — remove an action (or whole controller) from discovery
+
+Applied at class level, every action in the controller is excluded; applied at method level, only
+that action is. An optional reason string documents *why*, for code review — it has no runtime
+effect.
+
+```csharp
+[ExcludeFromTools("Requires elevated privileges; not safe to expose to an LLM caller")]
+[HttpDelete("{id}/purge")]
+[Description("Permanently purges an account")]
+public IActionResult PurgeAccount(string id) { ... }
+```
+
+Effect: `PurgeAccount` never appears in `tools/list`, regardless of `[BotSurface]`.
+
+### `[ToolHints]` — override the safety annotations emitted for a tool
+
+Every tool's `annotations` (`readOnlyHint`, `destructiveHint`, `openWorldHint`, `idempotentHint`)
+start from a convention derived from the HTTP verb:
+
+| Verb          | readOnly | destructive | openWorld | idempotent |
+|---------------|----------|-------------|-----------|------------|
+| `[HttpGet]`   | `true`   | `false`     | `false`   | `false`    |
+| `[HttpDelete]`| `false`  | `true`      | `false`   | `false`    |
+| anything else | `false`  | `false`     | `false`   | `false`    |
+
+`[ToolHints]` **ORs** on top of that — it can only raise a flag, never lower one derived from the
+verb:
+
+```csharp
+[HttpPost("notify")]
+[ToolHints(openWorld: true)]           // calls out to an external service
+[Description("Sends a notification to an external system")]
+public IActionResult SendNotification([FromBody] NotifyRequest request) { ... }
+// -> annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true, idempotentHint: false }
+
+[HttpPost("delete/{id}")]
+[ToolHints(destructive: true)]         // POST that deletes, so the GET/DELETE convention can't catch it
+[Description("Deletes an item permanently")]
+public IActionResult DeleteItem(string id) { ... }
+// -> annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false, idempotentHint: false }
+```
+
+### `[ToolName]` — override the convention-derived tool name
+
+Without it, the tool name is `{controller}_{action}` in snake_case, with `Controller`/`Api`/`Async`
+suffixes stripped (`OrdersApiController.SubmitFeedback` → `orders_submit_feedback`). With it, the
+given name is used verbatim — useful when the convention would produce something awkward, or when
+you need a stable name that survives a method rename:
+
+```csharp
+[HttpPost("feedback")]
+[ToolName("orders_submit_feedback")]
+[Description("Submits feedback about an order")]
+public IActionResult PostFeedbackModern([FromBody] SubmitFeedbackRequest request) { ... }
+// -> name: "orders_submit_feedback" (not "orders_post_feedback_modern")
+```
+
+### `[ExactlyOneOf]` / `[AtLeastOneOf]` — cross-field constraints on a request DTO
+
+Class-level, on the request DTO type (not the action). Property names are C# names; the emitted
+JSON Schema uses their camelCase JSON names. `ExactlyOneOf` emits `oneOf` (exactly one of the
+listed properties must be present); `AtLeastOneOf` emits `anyOf` (one or more). Constrained
+properties are removed from the top-level `required` array — the `allOf` entry expresses the
+constraint instead:
+
+```csharp
+[ExactlyOneOf(nameof(TargetKey), nameof(TargetName))]
+public sealed class LinkWidgetRequest
+{
+    public string? TargetKey { get; set; }
+    public string? TargetName { get; set; }
+}
+```
+
+```json
+{
+  "properties": {
+    "targetKey": { "type": "string" },
+    "targetName": { "type": "string" }
+  },
+  "allOf": [
+    { "oneOf": [ { "required": ["targetKey"] }, { "required": ["targetName"] } ] }
+  ]
+}
+```
+
+Both attributes are repeatable on the same type for independent constraint groups (e.g. one
+`AtLeastOneOf` pair and one `ExactlyOneOf` pair on the same DTO, as in a rename-with-locators
+request).
+
+All five non-surface attributes above are exercised end-to-end by `GoldenJsonOutputTests` and at
+the unit level by `McpToolDefinitionBuilderTests`/`InputSchemaBuilderTests`/`QualifyingActionDiscovererTests`.
 
 ## Wiring this into your API
 
@@ -70,13 +166,21 @@ The schema builder works by reflecting each parameter type's **public properties
 produces a sensible schema when the parameter is a real request DTO — a `class` or `record` whose
 public properties are the request's fields.
 
-**Route/query parameters** may be bare primitives (`string`, `int`, `Guid`, `bool`, `DateTime`,
-enums) — they're bound by parameter name into a single named schema property, e.g.:
+**Non-body parameters** — anything without `[FromBody]`, regardless of whether it carries
+`[FromRoute]`/`[FromQuery]` or no binding attribute at all — may be a bare primitive: `string`,
+any integer/floating-point/`decimal` type, `bool`, `DateTime`, `Guid`, or an enum, including their
+nullable forms (`int?`, `Guid?`, ...). Each becomes its own named schema property, keyed by the C#
+parameter name:
 
 ```csharp
-[HttpGet("{timesheetKey}/attachments/{fileName}")]
-public IActionResult GetAttachment([FromRoute] string timesheetKey, [FromRoute] string fileName)
+[HttpGet("find")]
+public IActionResult FindWidgets(Guid ownerId, DateTime? since, bool includeArchived, WidgetStatus status)
+// -> properties: { ownerId: {type: string, format: uuid}, since: {type: string, format: date-time},
+//                  includeArchived: {type: boolean}, status: {type: string, enum: [...]} }
 ```
+
+Covered end-to-end by `GoldenJsonOutputTests` (asserts the exact generated JSON for a mixed-type,
+unannotated parameter list) and by `InputSchemaBuilderTests` for each type individually.
 
 **`[FromBody]` parameters must always be a DTO**, never a bare primitive, enum, `Guid`, `DateTime`,
 or a raw array/collection. Reflecting `System.String` or `List<T>` directly would expose their CLR
@@ -96,5 +200,5 @@ public sealed record RenameRequest(string NewName);
 public IActionResult Rename([FromBody] RenameRequest request) { ... }
 ```
 
-This mirrors how every controller in Zipwire's own API is written: every `[FromBody]` parameter is
-a `*Request`/`*Locator`/`*Config` record or class, never a primitive.
+This mirrors a common convention for well-behaved ASP.NET-style APIs: every `[FromBody]` parameter
+is a `*Request`/`*Locator`/`*Config` record or class, never a primitive.
