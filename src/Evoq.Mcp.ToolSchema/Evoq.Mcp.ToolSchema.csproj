@@ -27,10 +27,6 @@
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Compile Include="..\Evoq.Mcp.ToolSchema.Attributes\*.cs" LinkBase="Attributes" />
-  </ItemGroup>
-
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.1'">
     <PackageReference Include="System.Text.Json" Version="8.0.5" />
     <PackageReference Include="System.ComponentModel.Annotations" Version="5.0.0" />
